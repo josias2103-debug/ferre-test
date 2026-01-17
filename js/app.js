@@ -487,9 +487,15 @@ createApp({
             contarClicksLogo, loginAdmin, actualizarUrlApi, alternarLicencia, cerrarAdmin, resetFabrica, instalarApp,
             confirmarEliminacion: (p) => { if(confirm("Eliminar?")) { estado.productos = estado.productos.filter(i => i.id !== p.id); CloudService.registrarAccion('eliminarProducto', p.id); } },
             guardarConfiguracion: async () => { 
+                // Guardar localmente primero para persistencia inmediata
+                DB.save('config_empresa', estado.config);
+                DB.save('tasa_binance', estado.tasaBinance);
+
+                // Sincronizar con la nube
                 Object.keys(estado.config).forEach(k => CloudService.registrarAccion('guardarConfig', { clave: k, valor: estado.config[k] })); 
                 CloudService.registrarAccion('guardarConfig', { clave: 'TASA_BINANCE', valor: estado.tasaBinance }); // Guardar la tasa Binance
-                alert("Configuración guardada."); 
+                
+                alert("Configuración guardada localmente y en cola de sincronización."); 
                 estado.modalConfigAbierto = false; 
             },
             procesarVentaFinal, anularVentaAccion: (v) => { CloudService.registrarAccion('anularVenta', v.id); v.estado = 'ANULADO'; v.items.forEach(i => DB.updateLocalStock(i.id, -i.cantidad)); estado.productos = DB.get('inventario_local'); },
