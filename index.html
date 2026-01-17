@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="es" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ferretería Cloud POS</title>
+    
+    <!-- PWA Config -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#137fec">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
+    <!-- CSS & Fonts -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+    
+    <!-- Libs -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: { "display": ["Inter", "sans-serif"] },
+                },
+            },
+        }
+    </script>
+
+    <style>
+        [v-cloak] { display: none !important; }
+        body { font-family: 'Inter', sans-serif; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Asegurar que las tarjetas tengan altura uniforme */
+        .card-product {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            min-height: 140px;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 h-screen overflow-hidden">
+
+    <iframe id="printFrame" style="position:fixed; top:-9999px; left:-9999px; width:1px; height:1px;"></iframe>
+
+    <div id="app" v-cloak class="h-full flex flex-col">
+
+        <!-- LAYOUT -->
+        <div class="flex h-screen overflow-hidden">
+            
+            <!-- SIDEBAR -->
+            <aside class="w-20 lg:w-64 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col h-full shrink-0 z-20 transition-all duration-300">
+                <div @click="contarClicksLogo" class="p-4 flex items-center justify-center lg:justify-start gap-3 h-16 overflow-hidden cursor-pointer select-none">
+                    <!-- Logo Dinámico o Default -->
+                    <img v-if="estado.config.EMPRESA_LOGO_URL" :src="estado.config.EMPRESA_LOGO_URL" class="w-8 h-8 object-contain rounded-md bg-white border border-slate-100" alt="Logo">
+                    <div v-else class="bg-primary size-8 rounded flex items-center justify-center text-white shrink-0">
+                        <span class="material-symbols-outlined text-lg">hardware</span>
+                    </div>
+                    <!-- Nombre Dinámico -->
+                    <span class="hidden lg:block font-bold text-sm tracking-tight truncate">{{ estado.config.EMPRESA_NOMBRE || 'FERRETERÍA PRO' }}</span>
+                </div>
+
+                <nav class="flex-1 px-2 space-y-1 mt-2">
+                    <!-- BOTÓN ASISTENTE IA -->
+                    <button @click="abrirIA" class="w-full flex items-center gap-3 px-3 py-3 rounded-lg mb-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg hover:shadow-purple-500/20 transition-all">
+                        <span class="material-symbols-outlined">psychology</span>
+                        <span class="hidden lg:inline text-sm font-bold">Asistente IA</span>
+                    </button>
+                    <button @click="cambiarVista('dashboard')" :class="estado.vistaActual === 'dashboard' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors group">
+                        <span class="material-symbols-outlined">dashboard</span>
+                        <span class="hidden lg:inline text-sm font-medium">Dashboard</span>
+                    </button>
+                    <button @click="cambiarVista('pos')" :class="estado.vistaActual === 'pos' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors group">
+                        <span class="material-symbols-outlined">point_of_sale</span>
+                        <span class="hidden lg:inline text-sm font-medium">Punto de Venta</span>
+                    </button>
+                    <button @click="cambiarVista('inventario')" :class="estado.vistaActual === 'inventario' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors">
+                        <span class="material-symbols-outlined">inventory_2</span>
+                        <span class="hidden lg:inline text-sm font-medium">Inventario</span>
+                    </button>
+                    <button @click="cambiarVista('ventas')" :class="estado.vistaActual === 'ventas' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors">
+                        <span class="material-symbols-outlined">receipt_long</span>
+                        <span class="hidden lg:inline text-sm font-medium">Historial Ventas</span>
+                    </button>
+                    <button @click="cambiarVista('presupuestos')" :class="estado.vistaActual === 'presupuestos' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-50'" class="w-full flex items-center gap-3 px-3 py-3 rounded-lg transition-colors">
+                        <span class="material-symbols-outlined">request_quote</span>
+                        <span class="hidden lg:inline text-sm font-medium">Presupuestos</span>
+                    </button>
+                </nav>
+
+                <div class="p-4 border-t border-slate-200 text-[10px] text-center lg:text-left space-y-1">
+                    <div class="flex justify-between items-center">
+                        <div class="font-bold text-slate-400 uppercase tracking-wider">Configuración</div>
+                        <button @click="estado.modalConfigAbierto = true" class="text-slate-400 hover:text-primary transition-colors" title="Ajustes"><span class="material-symbols-outlined text-lg">settings</span></button>
+                    </div>
+                    
+                    <div class="flex items-baseline justify-center lg:justify-start gap-1">
+                        <span class="font-bold text-slate-400">BCV:</span>
+                        <span class="text-lg font-black text-slate-800">Bs. {{ estado.tasaBCV.toFixed(2) }}</span>
+                    </div>
+
+                    <div class="flex items-baseline justify-center lg:justify-start gap-1">
+                        <span class="font-bold text-slate-400">BINANCE:</span>
+                        <span class="text-lg font-black text-yellow-600">Bs. {{ estado.tasaBinance.toFixed(2) }}</span>
+                    </div>
+
+                    <div class="text-slate-400 truncate flex items-center gap-1 justify-center lg:justify-start">
+                        <span class="w-2 h-2 rounded-full" :class="estado.online ? 'bg-green-500' : 'bg-red-500'"></span>
+                        {{ estado.online ? 'Online' : 'Offline' }}
+                    </div>
+                </div>
+            </aside>
+
+            <!-- CONTENIDO -->
+            <main class="flex-1 flex flex-col min-w-0 bg-slate-50 dark:bg-slate-950 relative">
+                
+                <!-- INDICADOR DE SINCRONIZACIÓN -->
+                <div v-if="estado.sincronizando" class="bg-primary text-white text-[10px] font-bold text-center py-1 animate-pulse uppercase tracking-widest z-50">
+                    Sincronizando cambios con la nube...
+                </div>
+                <div v-if="!estado.online" class="bg-amber-500 text-white text-[10px] font-bold text-center py-1 uppercase tracking-widest z-50">
+                    Modo Offline: Los cambios se guardarán en el dispositivo.
+                </div>
+
+                <!-- HEADER (Solo visible en POS/Inventario) -->
+                <header v-if="estado.vistaActual !== 'dashboard'" class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 flex items-center justify-between px-4 shrink-0 gap-4">
+                    <div class="flex-1 max-w-xl relative">
+                        <span class="material-symbols-outlined absolute left-3 top-2.5 text-slate-400">search</span>
+                        <input v-model="estado.busqueda" class="w-full bg-slate-100 border-none rounded-lg py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary" placeholder="Buscar producto..." type="text"/>
+                    </div>
+                    <button @click="iniciarScanner" class="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 text-slate-600 flex gap-2 items-center">
+                        <span class="material-symbols-outlined">qr_code_scanner</span>
+                        <span class="hidden md:inline text-xs font-bold uppercase">Escanear</span>
+                    </button>
+                </header>
+
+                <!-- VISTA: DASHBOARD -->
+                <div v-show="estado.vistaActual === 'dashboard'" class="p-6 overflow-y-auto h-full space-y-6">
+                    <h2 class="text-2xl font-black text-slate-800">Resumen Financiero</h2>
+                    
+                    <!-- KPIs -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="flex items-center gap-4 mb-2">
+                                <div class="p-3 bg-green-50 text-green-600 rounded-xl"><span class="material-symbols-outlined">attach_money</span></div>
+                                <p class="text-slate-500 text-sm font-bold uppercase">Ingresos Totales</p>
+                            </div>
+                            <h3 class="text-3xl font-black text-slate-900">${{ formatCurrency(reportes.kpis.ingresos) }}</h3>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                            <div class="flex items-center gap-4 mb-2">
+                                <div class="p-3 bg-red-50 text-red-600 rounded-xl"><span class="material-symbols-outlined">trending_down</span></div>
+                                <p class="text-slate-500 text-sm font-bold uppercase">Costos / Gastos</p>
+                            </div>
+                            <h3 class="text-3xl font-black text-slate-900">${{ formatCurrency(reportes.kpis.costos) }}</h3>
+                        </div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden">
+                            <div class="absolute right-0 top-0 p-6 opacity-10"><span class="material-symbols-outlined text-8xl">savings</span></div>
+                            <div class="relative z-10">
+                                <p class="text-slate-500 text-sm font-bold uppercase mb-2">Ganancia Neta</p>
+                                <h3 class="text-4xl font-black text-primary">${{ formatCurrency(reportes.kpis.ganancias) }}</h3>
+                                <p class="text-xs font-bold text-green-600 mt-1 flex items-center gap-1">
+                                    <span class="material-symbols-outlined text-sm">trending_up</span>
+                                    Margen: {{ reportes.kpis.margen }}%
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Gráfica -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 h-80">
+                        <h3 class="font-bold text-lg mb-4">Ventas Últimos 7 Días</h3>
+                        <div class="h-full pb-8">
+                            <canvas id="ventasChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VISTA: POS -->
+                <div v-show="estado.vistaActual === 'pos'" class="flex flex-1 overflow-hidden">
+                    <div class="flex-1 overflow-y-auto p-4">
+                        <!-- Corrección GRID responsive para que no se salga el contenido -->
+                        <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                            <div v-for="p in productosFiltrados" :key="p.id" @click="agregarAlCarrito(p)"
+                                 class="bg-white rounded-xl p-3 shadow-sm border border-transparent hover:border-primary cursor-pointer active:scale-95 transition-all card-product group">
+                                
+                                <div>
+                                    <div class="flex justify-between items-start mb-2">
+                                        <span class="text-[9px] uppercase tracking-wide bg-slate-100 px-1.5 py-0.5 rounded font-bold text-slate-500 truncate max-w-[70px]">{{ p.categoria }}</span>
+                                        <span :class="p.stock < 5 ? 'text-red-500 bg-red-50' : 'text-green-600 bg-green-50'" class="text-[9px] px-1.5 py-0.5 rounded font-bold">{{ p.stock }}</span>
+                                    </div>
+                                    <h3 class="font-bold text-sm leading-snug text-slate-800 line-clamp-2 mb-1 group-hover:text-primary transition-colors" :title="p.nombre">{{ p.nombre }}</h3>
+                                    <p class="text-[10px] text-slate-400 font-mono">{{ p.sku }}</p>
+                                </div>
+
+                                <div class="mt-3 pt-2 border-t border-slate-100">
+                                    <div class="flex flex-col gap-1">
+                                        <div class="flex justify-between items-end">
+                                            <p class="font-black text-xl text-slate-900 leading-none">${{ formatCurrency(p.precio) }}</p>
+                                            <p class="text-[9px] font-bold text-slate-400 uppercase">Precio</p>
+                                        </div>
+                                        <p class="font-bold text-xs text-yellow-600 leading-none">Binance {{ formatCurrency(p.precio * estado.tasaBinance) }}</p> <!-- New Binance price -->
+                                        <p class="font-bold text-xs text-primary leading-none">Bs. {{ formatCurrency(p.precio * estado.tasaBCV) }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sidebar Carrito (Igual que antes) -->
+                    <div class="w-80 md:w-96 bg-white border-l border-slate-200 flex flex-col shadow-xl z-10">
+                         <div class="flex-1 overflow-y-auto p-4 space-y-3">
+                            <div v-if="estado.carrito.length === 0" class="h-full flex flex-col items-center justify-center text-slate-300">
+                                <span class="material-symbols-outlined text-6xl mb-2">shopping_cart_off</span>
+                                <p class="text-sm">Carrito vacío</p>
+                            </div>
+                            <div v-for="(item, index) in estado.carrito" :key="index" class="flex gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100 animate-fade-in">
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-bold text-sm truncate">{{ item.nombre }}</p>
+                                    <p class="text-xs text-slate-500">${{ formatCurrency(item.precio) }} x {{ item.cantidad }}</p>
+                                </div>
+                                <div class="flex flex-col items-end gap-1">
+                                    <p class="font-bold text-sm">${{ formatCurrency(item.precio * item.cantidad) }}</p>
+                                    <div class="flex bg-white rounded border border-slate-200 h-6">
+                                        <button @click="ajustarCantidad(index, -1)" class="w-6 flex items-center justify-center hover:bg-slate-100">-</button>
+                                        <button @click="ajustarCantidad(index, 1)" class="w-6 flex items-center justify-center hover:bg-slate-100">+</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                         <div class="p-4 bg-slate-50 border-t border-slate-200 space-y-2">
+                            <div class="flex justify-between text-sm">
+                                <span class="text-slate-500">Subtotal USD</span>
+                                <span class="font-bold">${{ formatCurrency(totalCarritoUSD) }}</span>
+                            </div>
+                            <div class="flex justify-between text-sm text-slate-500">
+                                <span>Ref. BCV</span>
+                                <span>Bs. {{ formatCurrency(totalCarritoVES) }}</span>
+                            </div>
+                            <!-- NUEVA LINEA PARA BINANCE P2P -->
+                            <div class="flex justify-between text-sm font-bold text-yellow-600">
+                                <span>Ref. Binance P2P</span>
+                                <span>Bs. {{ formatCurrency(totalCarritoUSD * estado.tasaBinance) }}</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button @click="abrirModalPresupuesto" :disabled="estado.carrito.length === 0" 
+                                        class="flex-1 bg-white text-slate-700 font-bold py-3.5 rounded-xl border border-slate-300 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
+                                    <span class="material-symbols-outlined text-sm">request_quote</span>
+                                    <span class="text-xs">PRESUPUESTO</span>
+                                </button>
+                                <button @click="abrirModalPago" :disabled="estado.carrito.length === 0" 
+                                        class="flex-[2] bg-primary text-white font-bold py-3.5 rounded-xl shadow-lg shadow-primary/20 hover:bg-primary/90 disabled:opacity-50 disabled:shadow-none transition-all flex justify-center items-center gap-2">
+                                    <span>COBRAR</span>
+                                    <span class="bg-white/20 px-2 rounded text-sm">${{ formatCurrency(totalCarritoUSD) }}</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VISTA: INVENTARIO -->
+                <div v-show="estado.vistaActual === 'inventario'" class="p-6 overflow-y-auto relative h-full">
+                    <button @click="estado.modalProductoAbierto = true" class="fixed bottom-8 right-8 bg-primary text-white w-14 h-14 rounded-full shadow-xl flex items-center justify-center hover:scale-110 transition-transform z-30">
+                        <span class="material-symbols-outlined text-3xl">add</span>
+                    </button>
+
+                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden mb-20">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 border-b">
+                                <tr>
+                                    <th class="px-4 py-3">Producto</th>
+                                    <th class="px-4 py-3">Stock</th>
+                                    <th class="px-4 py-3 text-right">Precio USD</th>
+                                    <th class="px-4 py-3 text-center">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-for="p in productosFiltrados" :key="p.id">
+                                    <td class="px-4 py-3">
+                                        <div class="font-bold">{{ p.nombre }}</div>
+                                        <div class="text-xs text-slate-500">{{ p.sku }}</div>
+                                    </td>
+                                    <td class="px-4 py-3 font-mono">{{ p.stock }}</td>
+                                    <td class="px-4 py-3 text-right font-bold">${{ formatCurrency(p.precio) }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        <button @click.stop="confirmarEliminacion(p)" class="text-slate-400 hover:text-red-500 transition-colors p-1">
+                                            <span class="material-symbols-outlined">delete</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- VISTA: HISTORIAL VENTAS -->
+                <div v-show="estado.vistaActual === 'ventas'" class="p-6 overflow-y-auto h-full">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold">Historial de Transacciones</h2>
+                        <button @click="cargarHistorialVentas" class="text-primary hover:underline text-sm font-bold flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">refresh</span> Actualizar
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 border-b">
+                                <tr>
+                                    <th class="px-6 py-4">Ticket</th>
+                                    <th class="px-6 py-4">Fecha</th>
+                                    <th class="px-6 py-4">Items</th>
+                                    <th class="px-6 py-4 text-right">Total USD</th>
+                                    <th class="px-6 py-4 text-center">Estado</th>
+                                    <th class="px-6 py-4 text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-if="historialVentas.length === 0">
+                                    <td colspan="6" class="p-8 text-center text-slate-400">No hay ventas registradas o cargando...</td>
+                                </tr>
+                                <tr v-for="v in historialVentas" :key="v.id" class="hover:bg-slate-50">
+                                    <td class="px-6 py-4 font-mono font-bold text-slate-600">{{ v.id }}</td>
+                                    <td class="px-6 py-4 text-slate-500 text-xs">{{ v.fecha }}</td>
+                                    <td class="px-6 py-4 text-xs">
+                                        <div v-for="i in v.items" class="truncate max-w-[150px]">• {{ i.nombre }} (x{{ i.cantidad }})</div>
+                                    </td>
+                                    <td class="px-6 py-4 text-right font-bold">${{ formatCurrency(v.total) }}</td>
+                                    <td class="px-6 py-4 text-center">
+                                        <span :class="v.estado === 'VALID' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'" class="px-2 py-1 rounded text-[10px] font-bold uppercase">{{ v.estado }}</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center flex gap-2 justify-center">
+                                        <button @click="verTicketHistorial(v)" class="text-blue-500 hover:bg-blue-50 px-3 py-1.5 rounded border border-blue-200 text-xs font-bold transition-colors flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-sm">visibility</span>
+                                        </button>
+                                        <button v-if="v.estado === 'VALID'" @click="anularVentaAccion(v)" class="text-red-500 hover:bg-red-50 px-3 py-1.5 rounded border border-red-200 text-xs font-bold transition-colors">
+                                            ANULAR
+                                        </button>
+                                        <span v-else class="text-slate-300">-</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- VISTA: PRESUPUESTOS -->
+                <div v-show="estado.vistaActual === 'presupuestos'" class="p-6 overflow-y-auto h-full">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-xl font-bold">Historial de Presupuestos</h2>
+                        <button @click="cargarHistorialPresupuestos" class="text-primary hover:underline text-sm font-bold flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">refresh</span> Actualizar
+                        </button>
+                    </div>
+
+                    <div class="bg-white rounded-xl shadow border border-slate-200 overflow-hidden">
+                        <table class="w-full text-left text-sm">
+                            <thead class="bg-slate-50 border-b">
+                                <tr>
+                                    <th class="px-6 py-4">ID</th>
+                                    <th class="px-6 py-4">Fecha</th>
+                                    <th class="px-6 py-4">Cliente</th>
+                                    <th class="px-6 py-4 text-right">Total</th>
+                                    <th class="px-6 py-4 text-center">Moneda</th>
+                                    <th class="px-6 py-4 text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y">
+                                <tr v-if="historialPresupuestos.length === 0">
+                                    <td colspan="6" class="p-8 text-center text-slate-400">No hay presupuestos o cargando...</td>
+                                </tr>
+                                <tr v-for="p in historialPresupuestos" :key="p.id" class="hover:bg-slate-50">
+                                    <td class="px-6 py-4 font-mono font-bold text-slate-600">{{ p.id }}</td>
+                                    <td class="px-6 py-4 text-slate-500 text-xs">{{ p.fecha }}</td>
+                                    <td class="px-6 py-4 font-bold">{{ p.cliente ? p.cliente.nombre : 'Genérico' }}</td>
+                                    <td class="px-6 py-4 text-right font-bold">
+                                        {{ p.moneda === 'VES' ? 'Bs.' : '$' }} 
+                                        {{ formatCurrency(p.moneda === 'VES' ? p.total * p.tasa : p.total) }}
+                                    </td>
+                                    <td class="px-6 py-4 text-center">
+                                        <span class="bg-slate-100 text-slate-700 px-2 py-1 rounded text-[10px] font-bold uppercase">{{ p.moneda }}</span>
+                                    </td>
+                                    <td class="px-6 py-4 text-center flex gap-2 justify-center">
+                                        <button @click="verTicketPresupuesto(p)" class="text-blue-500 hover:bg-blue-50 px-3 py-1.5 rounded border border-blue-200 text-xs font-bold transition-colors flex items-center gap-1">
+                                            <span class="material-symbols-outlined text-sm">print</span>
+                                        </button>
+                                        <button @click="cargarPresupuestoAlCarrito(p)" class="text-green-600 hover:bg-green-50 px-3 py-1.5 rounded border border-green-200 text-xs font-bold transition-colors" title="Cargar al Carrito">
+                                            <span class="material-symbols-outlined text-sm">shopping_cart_checkout</span>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+
+        <!-- MODALES (Mantengo los mismos de la versión anterior, solo actualizando estilos si necesario) -->
+        <!-- MODAL AGREGAR PRODUCTO -->
+        <div v-if="estado.modalProductoAbierto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-fade-in">
+            <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6">
+                <h2 class="font-black text-xl uppercase mb-6">Nuevo Producto</h2>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="col-span-2 relative">
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nombre Producto</label>
+                            <input v-model="nuevoProducto.nombre" type="text" class="w-full rounded-lg border-slate-300" placeholder="Escriba para buscar existente...">
+                            <!-- Sugerencias -->
+                            <div v-if="sugerenciasProducto.length > 0" class="absolute left-0 right-0 z-50 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+                                <ul>
+                                    <li v-for="s in sugerenciasProducto" :key="s.id" @click="seleccionarProductoExistente(s)" class="px-4 py-2 hover:bg-slate-100 cursor-pointer text-sm border-b last:border-0">
+                                        <div class="font-bold text-slate-700">{{ s.nombre }}</div>
+                                        <div class="text-xs text-slate-400">SKU: {{ s.sku }} | Precio: ${{ s.precio }}</div>
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">SKU (Código)</label>
+                            <div class="flex gap-2">
+                                <input v-model="nuevoProducto.sku" type="text" class="w-full rounded-lg border-slate-300 font-mono uppercase">
+                                <button @click="escanearParaNuevo" class="bg-slate-100 p-2 rounded border"><span class="material-symbols-outlined">qr_code_scanner</span></button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Categoría</label>
+                            <input v-model="nuevoProducto.categoria" type="text" class="w-full rounded-lg border-slate-300" list="categorias-list">
+                            <datalist id="categorias-list"><option>Herramientas</option><option>Plomería</option><option>Electricidad</option></datalist>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Precio Venta ($)</label>
+                            <input v-model.number="nuevoProducto.precio" type="number" step="0.01" class="w-full rounded-lg border-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Costo ($)</label>
+                            <input v-model.number="nuevoProducto.costo" type="number" step="0.01" class="w-full rounded-lg border-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Stock Inicial</label>
+                            <input v-model.number="nuevoProducto.stock" type="number" class="w-full rounded-lg border-slate-300">
+                        </div>
+                         <div>
+                            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Stock Mínimo</label>
+                            <input v-model.number="nuevoProducto.stock_min" type="number" class="w-full rounded-lg border-slate-300">
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-8 flex gap-3">
+                    <button @click="estado.modalProductoAbierto = false" class="flex-1 py-3 font-bold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                    <button @click="guardarProducto" class="flex-1 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary/90">GUARDAR / SUMAR</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL PRESUPUESTO -->
+        <div v-if="estado.modalPresupuestoAbierto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-fade-in">
+            <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6">
+                <h2 class="font-black text-xl uppercase mb-1">Emitir Presupuesto</h2>
+                <p class="text-xs text-slate-500 mb-6">El inventario NO será descontado.</p>
+
+                <div class="space-y-6">
+                     <!-- SECCIÓN CLIENTE -->
+                     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-xs font-bold uppercase text-slate-500">Datos del Cliente</h3>
+                            <div class="flex bg-slate-100 rounded p-1">
+                                <button @click="clienteState.tipo = 'generico'" :class="clienteState.tipo === 'generico' ? 'bg-white shadow text-slate-800' : 'text-slate-500'" class="px-3 py-1 text-xs font-bold rounded transition-all">Genérico</button>
+                                <button @click="clienteState.tipo = 'personalizado'" :class="clienteState.tipo === 'personalizado' ? 'bg-white shadow text-primary' : 'text-slate-500'" class="px-3 py-1 text-xs font-bold rounded transition-all">Personalizado</button>
+                            </div>
+                        </div>
+                        
+                        <div v-if="clienteState.tipo === 'personalizado'" class="grid grid-cols-1 gap-3 animate-fade-in">
+                            <input v-model="clienteState.datos.documento" type="text" placeholder="RIF / CI" class="rounded-lg border-slate-300 text-sm">
+                            <input v-model="clienteState.datos.nombre" type="text" placeholder="Nombre o Razón Social" class="rounded-lg border-slate-300 text-sm">
+                            <input v-model="clienteState.datos.telefono" type="text" placeholder="Teléfono" class="rounded-lg border-slate-300 text-sm">
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN MONEDA -->
+                    <div>
+                        <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">Moneda y Tasa</h3>
+                        <div class="grid grid-cols-1 gap-3">
+                            <!-- Opción USD -->
+                            <label class="flex items-center gap-2 p-3 border rounded-lg cursor-pointer hover:bg-slate-50" :class="{'ring-2 ring-primary border-primary': presupuestoState.moneda === 'USD'}">
+                                <input type="radio" v-model="presupuestoState.moneda" value="USD" class="text-primary focus:ring-primary">
+                                <span class="font-bold text-sm">Dólares (USD)</span>
+                            </label>
+
+                            <!-- Opción VES -->
+                            <div class="border rounded-lg p-3" :class="{'ring-2 ring-primary border-primary': presupuestoState.moneda === 'VES'}">
+                                <label class="flex items-center gap-2 cursor-pointer mb-2">
+                                    <input type="radio" v-model="presupuestoState.moneda" value="VES" class="text-primary focus:ring-primary">
+                                    <span class="font-bold text-sm">Bolívares (VES)</span>
+                                </label>
+                                
+                                <!-- Sub-opciones de Tasa (Solo visibles si VES está seleccionado) -->
+                                <div v-if="presupuestoState.moneda === 'VES'" class="pl-6 space-y-2 mt-2 border-t pt-2">
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" v-model="presupuestoState.tipoTasa" value="BCV" class="text-slate-600 focus:ring-slate-500">
+                                        <div class="text-xs">
+                                            <span class="font-bold text-slate-700">Tasa BCV</span>
+                                            <span class="text-slate-500 ml-1">(Bs. {{ estado.tasaBCV }})</span>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-2 cursor-pointer">
+                                        <input type="radio" v-model="presupuestoState.tipoTasa" value="Binance" class="text-yellow-600 focus:ring-yellow-500">
+                                        <div class="text-xs">
+                                            <span class="font-bold text-yellow-700">Tasa Binance</span>
+                                            <span class="text-slate-500 ml-1">(Bs. {{ estado.tasaBinance }})</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex gap-3">
+                    <button @click="estado.modalPresupuestoAbierto = false" class="flex-1 py-3 font-bold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                    <button @click="generarPresupuesto" class="flex-1 py-3 bg-slate-900 text-white font-bold rounded-xl shadow-lg hover:bg-slate-800 flex justify-center items-center gap-2">
+                        <span class="material-symbols-outlined">print</span> GENERAR
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- MODAL DE PAGO (COMPLEJO) -->
+        <div v-if="estado.modalPagoAbierto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-fade-in">
+            <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
+                <div class="bg-slate-50 p-4 border-b flex justify-between items-center shrink-0">
+                    <div>
+                        <h2 class="font-black text-xl uppercase tracking-tight">Finalizar Venta</h2>
+                        <p class="text-xs text-slate-500">Agregue métodos de pago hasta cubrir el total.</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-xs font-bold uppercase text-slate-400">Total a Pagar</p>
+                        <p class="text-2xl font-black text-slate-900">${{ formatCurrency(totalCarritoUSD) }}</p>
+                    </div>
+                </div>
+                <!-- Cuerpo Modal -->
+                <div class="flex-1 overflow-y-auto p-6 space-y-6">
+                    
+                    <!-- SECCIÓN CLIENTE -->
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-xs font-bold uppercase text-slate-500">Datos del Cliente</h3>
+                            <div class="flex bg-slate-100 rounded p-1">
+                                <button @click="clienteState.tipo = 'generico'" :class="clienteState.tipo === 'generico' ? 'bg-white shadow text-slate-800' : 'text-slate-500'" class="px-3 py-1 text-xs font-bold rounded transition-all">Genérico</button>
+                                <button @click="clienteState.tipo = 'personalizado'" :class="clienteState.tipo === 'personalizado' ? 'bg-white shadow text-primary' : 'text-slate-500'" class="px-3 py-1 text-xs font-bold rounded transition-all">Personalizado</button>
+                            </div>
+                        </div>
+                        
+                        <div v-if="clienteState.tipo === 'personalizado'" class="grid grid-cols-1 md:grid-cols-2 gap-3 animate-fade-in">
+                            <input v-model="clienteState.datos.documento" type="text" placeholder="RIF / CI / DNI" class="rounded-lg border-slate-300 text-sm">
+                            <input v-model="clienteState.datos.nombre" type="text" placeholder="Nombre o Razón Social" class="rounded-lg border-slate-300 text-sm">
+                            <input v-model="clienteState.datos.telefono" type="text" placeholder="Teléfono" class="rounded-lg border-slate-300 text-sm">
+                            <input v-model="clienteState.datos.direccion" type="text" placeholder="Dirección" class="rounded-lg border-slate-300 text-sm">
+                        </div>
+                        <div v-else class="text-sm text-slate-500 italic">
+                            Se emitirá a nombre de "Consumidor Final".
+                        </div>
+                    </div>
+
+                    <!-- Formulario de Agregar Pago -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-4">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div class="col-span-2">
+                                <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Método</label>
+                                <select v-model="pagoState.metodoSeleccionado" @change="cambiarMetodo" class="w-full rounded-lg border-slate-300 text-sm py-2"><option v-for="m in metodos" :value="m">{{ m }}</option></select>
+                            </div>
+                            <!-- Banco: Oculto para Efectivo y Zelle -->
+                            <div v-if="!['Efectivo USD', 'Efectivo VES', 'Zelle'].includes(pagoState.metodoSeleccionado)">
+                                <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Banco</label>
+                                <select v-model="pagoState.bancoSeleccionado" class="w-full rounded-lg border-slate-300 text-sm py-2"><option value="" disabled>Seleccione...</option><option v-for="b in bancos" :value="b">{{ b }}</option></select>
+                            </div>
+                            <!-- Titular: Solo para Zelle -->
+                            <div v-if="pagoState.metodoSeleccionado === 'Zelle'">
+                                <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Titular (Opcional)</label>
+                                <input v-model="pagoState.titularInput" type="text" class="w-full rounded-lg border-slate-300 text-sm py-2" placeholder="Nombre Titular">
+                            </div>
+                            <!-- Referencia: Para todo menos Efectivo -->
+                             <div v-if="!['Efectivo USD', 'Efectivo VES'].includes(pagoState.metodoSeleccionado)">
+                                <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Referencia {{ pagoState.metodoSeleccionado === 'Zelle' ? '(Opcional)' : '' }}</label>
+                                <input v-model="pagoState.referenciaInput" type="text" class="w-full rounded-lg border-slate-300 text-sm py-2" placeholder="Ej: 123456">
+                            </div>
+                        </div>
+                        <div class="flex items-end gap-3">
+                            <div class="flex-1">
+                                <label class="block text-[10px] font-bold uppercase text-slate-500 mb-1">Monto ({{ pagoState.monedaInput }})</label>
+                                <input v-model.number="pagoState.montoInput" type="number" step="0.01" class="w-full text-xl font-bold border-slate-300 rounded-lg py-2 focus:ring-primary">
+                            </div>
+                            <button @click="agregarPagoParcial" :disabled="pagoState.montoInput <= 0" class="bg-slate-900 text-white px-6 py-3 rounded-lg font-bold text-sm hover:bg-slate-800 disabled:opacity-50">AGREGAR</button>
+                        </div>
+                    </div>
+                    <div v-if="pagoState.metodosAgregados.length > 0">
+                        <h3 class="text-xs font-bold uppercase text-slate-500 mb-2">Pagos Registrados</h3>
+                        <div class="space-y-2">
+                            <div v-for="(pago, idx) in pagoState.metodosAgregados" :key="idx" class="flex items-center justify-between bg-white border border-slate-200 p-3 rounded-lg shadow-sm">
+                                <div><p class="font-bold text-sm">{{ pago.metodo }}</p><p class="text-xs text-slate-500">{{ pago.banco }} {{ pago.referencia ? '- Ref: ' + pago.referencia : '' }}</p></div>
+                                <div class="flex items-center gap-4"><span class="font-mono font-bold">{{ pago.moneda }} {{ formatCurrency(pago.monto) }}</span><button @click="eliminarPago(idx)" class="text-red-500 hover:bg-red-50 p-1 rounded"><span class="material-symbols-outlined text-lg">delete</span></button></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
+                        <div class="bg-green-50 p-3 rounded-lg border border-green-100">
+                            <p class="text-[10px] font-bold uppercase text-green-700">Total Abonado</p>
+                            <p class="text-lg font-black text-green-700">${{ formatCurrency(totalPagadoUSD) }}</p>
+                        </div>
+                        <div :class="restanteUSD > 0.01 ? 'bg-red-50 border-red-100 text-red-700' : 'bg-slate-100 border-slate-200 text-slate-400'" class="p-3 rounded-lg border">
+                            <p class="text-[10px] font-bold uppercase">Restante por Pagar</p>
+                            <p class="text-lg font-black">${{ formatCurrency(restanteUSD) }}</p>
+                            <p v-if="restanteUSD > 0.01" class="text-xs font-bold">Bs. {{ formatCurrency(restanteVES) }}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t bg-slate-50 flex gap-3">
+                    <button @click="estado.modalPagoAbierto = false" class="flex-1 py-3 font-bold text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">Cancelar</button>
+                    <button @click="procesarVentaFinal" :disabled="restanteUSD > 0.01" class="flex-1 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all">CONFIRMAR Y IMPRIMIR</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL CONFIGURACIÓN -->
+        <div v-if="estado.modalConfigAbierto" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4 animate-fade-in">
+            <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl flex flex-col max-h-[85vh]">
+                <div class="p-6 shrink-0">
+                    <h2 class="font-black text-xl uppercase flex items-center gap-2">
+                        <span class="material-symbols-outlined">settings</span> Configuración
+                    </h2>
+                </div>
+                
+                <div class="overflow-y-auto px-6 space-y-6">
+                    <!-- DATOS DE EMPRESA -->
+                    <div>
+                        <h3 class="text-xs font-bold uppercase text-slate-500 mb-2 border-b pb-1">Datos de Facturación (Encabezado)</h3>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-3 gap-3">
+                                <div class="col-span-2">
+                                    <label class="block text-[10px] font-bold text-slate-400">Nombre Empresa</label>
+                                    <input v-model="estado.config.EMPRESA_NOMBRE" type="text" class="w-full text-sm rounded border-slate-300" placeholder="Ej: Ferretería El Clavo">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-400">RIF / NIT</label>
+                                    <input v-model="estado.config.EMPRESA_RIF" type="text" class="w-full text-sm rounded border-slate-300">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400">Logo (URL de Imagen)</label>
+                                <input v-model="estado.config.EMPRESA_LOGO_URL" type="text" class="w-full text-sm rounded border-slate-300" placeholder="https://ejemplo.com/logo.png">
+                                <p class="text-[9px] text-slate-400 mt-1">Pegue enlace directo a imagen (png/jpg). Se verá en App y Tickets.</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-400">Teléfono</label>
+                                    <input v-model="estado.config.EMPRESA_TELEFONO" type="text" class="w-full text-sm rounded border-slate-300">
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-400">Correlativo Ticket (Próximo)</label>
+                                    <input v-model.number="estado.config.CORRELATIVO" type="number" class="w-full text-sm rounded border-slate-300 font-mono">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400">Dirección</label>
+                                <input v-model="estado.config.EMPRESA_DIRECCION" type="text" class="w-full text-sm rounded border-slate-300">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400">Groq API Key (IA)</label>
+                                <input v-model="estado.config.GROQ_API_KEY" type="password" class="w-full text-sm rounded border-slate-300 font-mono" placeholder="gsk_...">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-yellow-600">Tasa Binance P2P</label>
+                                <input v-model.number="estado.tasaBinance" type="number" step="0.01" class="w-full text-sm rounded border-yellow-300 font-mono">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xs font-bold uppercase text-slate-500 mb-2 border-b pb-1">Formato de Recibo</h3>
+                        <div class="grid grid-cols-1 gap-3">
+                            <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50" :class="{'ring-2 ring-primary border-primary': estado.config.template === 'termico'}">
+                                <input type="radio" v-model="estado.config.template" value="termico" class="text-primary focus:ring-primary">
+                                <div>
+                                    <span class="font-bold block text-sm">Ticket Térmico (80mm)</span>
+                                    <span class="text-xs text-slate-500">Estándar para impresoras POS.</span>
+                                </div>
+                            </label>
+                            <label class="flex items-center gap-3 p-3 border rounded-lg cursor-pointer hover:bg-slate-50" :class="{'ring-2 ring-primary border-primary': estado.config.template === 'carta'}">
+                                <input type="radio" v-model="estado.config.template" value="carta" class="text-primary focus:ring-primary">
+                                <div>
+                                    <span class="font-bold block text-sm">Carta (A4 / Letter)</span>
+                                    <span class="text-xs text-slate-500">Formato formal completo.</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-6 mt-4 flex gap-3 shrink-0">
+                    <button @click="estado.modalConfigAbierto = false" class="flex-1 py-3 font-bold text-slate-600 hover:bg-slate-100 rounded-xl">Cerrar</button>
+                    <button @click="guardarConfiguracion" class="flex-1 py-3 bg-primary text-white font-bold rounded-xl shadow-lg hover:bg-primary/90">
+                        GUARDAR CAMBIOS
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL ASISTENTE IA -->
+        <div v-if="estado.modalIAAbierto" class="fixed inset-0 z-[70] flex items-end md:items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl flex flex-col h-[80vh] overflow-hidden animate-scale-in">
+                <div class="p-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex justify-between items-center">
+                    <div class="flex items-center gap-2">
+                        <span class="material-symbols-outlined">psychology</span>
+                        <h3 class="font-bold uppercase tracking-widest text-xs">Asistente Inteligente</h3>
+                    </div>
+                    <button @click="estado.modalIAAbierto = false"><span class="material-symbols-outlined">close</span></button>
+                </div>
+                <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50" id="chatContainer">
+                    <div v-for="msg in chatIA" :class="msg.role === 'user' ? 'text-right' : 'text-left'">
+                        <div :class="msg.role === 'user' ? 'bg-primary text-white' : 'bg-white text-slate-800 border'" class="inline-block p-3 rounded-2xl text-sm max-w-[80%] shadow-sm">
+                            {{ msg.content }}
+                        </div>
+                    </div>
+                    <div v-if="iaCargando" class="text-slate-400 text-xs animate-pulse italic">Groq IA está pensando...</div>
+                </div>
+                <div class="p-4 border-t bg-white flex gap-2">
+                    <input v-model="preguntaIA" @keyup.enter="enviarAI" type="text" placeholder="¿Cómo puedo ayudarte?" class="flex-1 border-none bg-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500">
+                    <button @click="enviarAI" class="bg-purple-600 text-white p-3 rounded-xl hover:bg-purple-700 shadow-lg transition-all active:scale-95"><span class="material-symbols-outlined">send</span></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL ADMINISTRACIÓN TÉCNICA (PROTEGIDO) -->
+        <div v-if="estado.modalAdminAbierto" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950 backdrop-blur-md">
+            <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 animate-fade-in">
+                <div class="text-center mb-8">
+                    <div class="bg-red-50 text-red-600 size-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-red-100">
+                        <span class="material-symbols-outlined text-4xl">admin_panel_settings</span>
+                    </div>
+                    <h2 class="text-2xl font-black text-slate-900 uppercase">Panel Técnico</h2>
+                    <p class="text-slate-500 text-sm">Acceso restringido al propietario.</p>
+                </div>
+
+                <div v-if="!adminAutenticado" class="space-y-4">
+                    <input v-model="adminPass" type="password" placeholder="Contraseña Maestra" class="w-full text-center text-xl font-bold tracking-widest rounded-2xl border-slate-200 py-4 focus:ring-primary">
+                    <button @click="loginAdmin" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">ACCEDER AL SISTEMA</button>
+                    <button @click="estado.modalAdminAbierto = false" class="w-full text-slate-400 text-sm font-bold mt-4">CANCELAR</button>
+                </div>
+
+                <div v-else class="space-y-6">
+                    <div class="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                        <label class="block text-[10px] font-bold text-blue-600 uppercase mb-2">Endpoint de Google Script (API URL)</label>
+                        <input v-model="tempApiUrl" type="text" class="w-full text-xs rounded-xl border-blue-200 py-3 mb-2" placeholder="https://script.google.com/...">
+                        <button @click="actualizarUrlApi" class="w-full bg-blue-600 text-white py-2 rounded-xl text-xs font-bold shadow-md">ACTUALIZAR CONEXIÓN</button>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-2xl border">
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-3">Gestión de Licencia</label>
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm font-bold">Estado de App</span>
+                            <button @click="alternarLicencia" :class="licenciaEstado ? 'bg-green-500' : 'bg-red-500'" class="px-4 py-2 text-white rounded-full text-xs font-bold transition-all">
+                                {{ licenciaEstado ? 'ACTIVA' : 'DESACTIVADA' }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="border-t pt-4 mt-4">
+                        <button v-if="estado.deferredPrompt" @click="instalarApp" class="w-full bg-green-600 text-white py-3 rounded-xl font-black text-xs shadow-lg hover:bg-green-700 transition-all mb-3 flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-lg">download</span>
+                            INSTALAR APLICACIÓN EN DISPOSITIVO
+                        </button>
+                        
+                        <button @click="resetFabrica" class="w-full bg-red-600 text-white py-3 rounded-xl font-black text-xs shadow-lg hover:bg-red-700 transition-all mb-3 flex items-center justify-center gap-2">
+                            <span class="material-symbols-outlined text-lg">delete_forever</span>
+                            REINICIAR APP DE FÁBRICA (Solucionar Errores)
+                        </button>
+                        <button @click="cerrarAdmin" class="w-full bg-slate-100 text-slate-600 py-3 rounded-xl font-bold text-sm">CERRAR PANEL</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="estado.scannerAbierto" class="fixed inset-0 z-[60] bg-black flex flex-col">
+            <div class="p-4 flex justify-between items-center text-white">
+                <h2 class="font-bold">Escanear Producto</h2>
+                <button @click="estado.scannerAbierto = false" class="text-white"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <div id="reader" class="flex-1 w-full h-full bg-black"></div>
+        </div>
+
+    </div>
+
+    <!-- Cargar Vue y App -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
